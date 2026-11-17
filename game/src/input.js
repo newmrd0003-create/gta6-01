@@ -1,53 +1,98 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// SOLARA HEAT — input.js
+// One job: keyboard + mouse state for the whole game. Held keys are read
+// every frame; one-shot presses (enter car, punch, reload, pause, horn)
+// are queued as flags and taken once by the loop, so a press between
+// frames is never lost or counted twice. Pointer drag orbits the camera;
+// a plain click fires the pistol.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+export const ACT_ENTER = 1;   // E — enter / exit a car
+export const ACT_PUNCH = 2;   // F — punch
+export const ACT_RELOAD = 4;  // R — reload pistol
+export const ACT_PAUSE = 8;   // Esc / P — pause
+export const ACT_SHOOT = 16;  // mouse click — fire pistol
+export const ACT_START = 32;  // Enter / Space — start from a menu
+export const ACT_HORN = 64;   // H — honk the horn (in a car)
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const PREVENT_DEFAULT = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
+// One-shot key -> action flag. Held keys never set a flag here.
+const ONE_SHOT_KEYS = {
+  KeyE: ACT_ENTER,
+  KeyF: ACT_PUNCH,
+  KeyR: ACT_RELOAD,
+  KeyH: ACT_HORN,
+  Escape: ACT_PAUSE,
+  KeyP: ACT_PAUSE,
+  Enter: ACT_START,
+  Space: ACT_START,
+};
+
+export function createInput(canvas) {
+  const keys = new Set();
   let actions = 0;
+  let mouseDX = 0, mouseDY = 0;
+  let dragging = false;
+  let lastX = 0, lastY = 0;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (event.repeat) return;
+    keys.add(event.code);
+    const flag = ONE_SHOT_KEYS[event.code];
+    if (flag) actions |= flag;
+    if (PREVENT_DEFAULT.includes(event.code)) event.preventDefault();
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+  window.addEventListener('keyup', (event) => keys.delete(event.code));
+  // Losing focus must not leave a key stuck down (Alt-Tab mid-drive).
+  window.addEventListener('blur', () => { keys.clear(); dragging = false; });
+
+  canvas.addEventListener('pointerdown', (event) => {
+    dragging = true; lastX = event.clientX; lastY = event.clientY;
+    if (event.button === 0) actions |= ACT_SHOOT;
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+  window.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    mouseDX += event.clientX - lastX;
+    mouseDY += event.clientY - lastY;
+    lastX = event.clientX; lastY = event.clientY;
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  window.addEventListener('pointerup', () => { dragging = false; });
+
+  const anyOf = (...codes) => codes.some((c) => keys.has(c));
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+    held(code) { return keys.has(code); },
+    heldAny(...codes) { return anyOf(...codes); },
+    // WASD / arrows: forward, strafe, back.
+    moveAxis() {
+      const f = (anyOf('KeyW', 'ArrowUp') ? 1 : 0) - (anyOf('KeyS', 'ArrowDown') ? 1 : 0);
+      const s = (anyOf('KeyD', 'ArrowRight') ? 1 : 0) - (anyOf('KeyA', 'ArrowLeft') ? 1 : 0);
+      return { forward: f, strafe: s };
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
+    // Car: W/S throttle, A/D steer, Space handbrake, Shift boost.
+    driveAxis() {
+      const throttle = (anyOf('KeyW', 'ArrowUp') ? 1 : 0) - (anyOf('KeyS', 'ArrowDown') ? 1 : 0);
+      const steer = (anyOf('KeyA', 'ArrowLeft') ? 1 : 0) - (anyOf('KeyD', 'ArrowRight') ? 1 : 0);
+      return {
+        throttle, steer,
+        brake: keys.has('Space'),
+        boost: anyOf('ShiftLeft', 'ShiftRight'),
+      };
+    },
+    sprint() { return anyOf('ShiftLeft', 'ShiftRight'); },
+    takeMouseDelta() {
+      const d = { x: mouseDX, y: mouseDY };
+      mouseDX = 0; mouseDY = 0;
+      return d;
+    },
     takeActions() {
       const taken = actions;
       actions = 0;
       return taken;
     },
+    peekActions() { return actions; },
+    // Drop every queued press — used when a menu opens so a stale Enter
+    // does not instantly start (or skip) the game behind it.
+    clearActions() { actions = 0; },
+    reset() { keys.clear(); actions = 0; mouseDX = 0; mouseDY = 0; dragging = false; },
   };
 }

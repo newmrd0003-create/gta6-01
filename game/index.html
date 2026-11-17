@@ -3,17 +3,135 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<meta name="description" content="SOLARA HEAT — an original open-world crime game in Costa Solara: steal cars, outrun the Solara PD, run Marta Solis's jobs. Plays offline in a desktop browser.">
+<title>SOLARA HEAT — Open-World Crime in Costa Solara</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e2a33;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #f2f5f7; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #top-left { position: absolute; top: 14px; left: 14px; }
+  #health-bar { width: 220px; height: 14px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #37d67a; }
+  #health-fill.low { animation: lowpulse 0.7s infinite alternate; }
+  @keyframes lowpulse { from { filter: brightness(.7); } to { filter: brightness(1.4); } }
+  #jobs { font-size: 13px; color: #ffd75e; text-shadow: 0 1px 2px #000; margin-top: 4px; }
+  /* red vignette flashed on damage — fades from JS, never blocks clicks */
+  #damage-flash { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(200,20,20,.55) 100%);
+    transition: opacity .25s; }
+  #cash { font-size: 26px; font-weight: 800; color: #7dff9a; text-shadow: 0 2px 3px #000; margin-top: 6px; }
+  #ammo { font-size: 14px; text-shadow: 0 1px 2px #000; }
+  #top-right { position: absolute; top: 14px; right: 14px; text-align: right; }
+  #stars { font-size: 30px; letter-spacing: 2px; color: #ffd75e; text-shadow: 0 2px 3px #000; }
+  #stars.hot { animation: pulse 0.8s infinite alternate; }
+  @keyframes pulse { from { opacity: .65; } to { opacity: 1; } }
+  #timer { font-size: 20px; font-weight: 700; color: #ffc030; text-shadow: 0 2px 3px #000; }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    max-width: 46%; background: rgba(0,0,0,.55); border-left: 4px solid #ffc030;
+    padding: 8px 14px; border-radius: 4px; font-size: 15px; line-height: 1.35; text-align: center; }
+  #speed { position: absolute; bottom: 18px; right: 20px; font-size: 26px; font-weight: 800; text-shadow: 0 2px 3px #000; }
+  #minimap-wrap { position: absolute; bottom: 14px; left: 14px; border: 2px solid rgba(255,255,255,.5);
+    border-radius: 6px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  #minimap { display: block; width: 180px; height: 180px; }
+  #map-label { position: absolute; bottom: 198px; left: 16px; font-size: 12px; letter-spacing: 2px;
+    color: #fff; text-shadow: 0 1px 2px #000; }
+  #toast { position: absolute; bottom: 210px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,.72); padding: 10px 18px; border-radius: 6px; font-size: 15px;
+    opacity: 0; transition: opacity .3s; max-width: 70%; text-align: center; }
+  #toast.show { opacity: 1; }
+  #hint { position: absolute; bottom: 18px; left: 210px; font-size: 12px; color: rgba(255,255,255,.75); text-shadow: 0 1px 2px #000; }
+  /* ---- overlays ---- */
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(10,30,45,.82), rgba(60,20,10,.78)); }
+  .overlay.hidden { display: none; }
+  .panel { max-width: 620px; padding: 34px 44px; text-align: center; }
+  .panel h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #ffc030;
+    text-shadow: 0 4px 0 #a33, 0 8px 24px rgba(0,0,0,.7); }
+  .panel h2 { font-size: 15px; letter-spacing: 6px; color: #9fd8ef; margin: 6px 0 18px; font-weight: 600; }
+  .panel p { font-size: 15px; line-height: 1.55; color: #e8eef2; }
+  .panel .controls { font-size: 13px; line-height: 1.8; color: #c8d4da; text-align: left;
+    display: inline-block; margin: 10px 0 20px; }
+  .panel .controls b { color: #ffc030; }
+  button { pointer-events: auto; cursor: pointer; font-size: 17px; font-weight: 700;
+    padding: 12px 26px; margin: 4px; border: none; border-radius: 6px;
+    background: #ffc030; color: #231303; }
+  button:hover { background: #ffd75e; }
+  button.ghost { background: rgba(255,255,255,.16); color: #fff; }
+  button.ghost:hover { background: rgba(255,255,255,.28); }
+  .small { font-size: 12px; color: #9fb2ba; margin-top: 14px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="SOLARA HEAT: an open-world crime game in Costa Solara"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="top-left">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">100</div>
+    <div id="cash">$150</div>
+    <div id="jobs"></div>
+    <div id="ammo">🔫 12 / ∞</div>
+  </div>
+  <div id="objective">Press Enter or click New Game.</div>
+  <div id="top-right">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="timer"></div>
+  </div>
+  <div id="map-label">COSTA SOLARA</div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="speed"></div>
+  <div id="hint">WASD move/drive · E steal car · Click shoot · F punch · H horn · R reload · M next job · Esc pause</div>
+  <div id="toast"></div>
+</div>
+<div id="damage-flash"></div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>SOLARA HEAT</h1>
+    <h2>AN OPEN-WORLD CRIME STORY IN COSTA SOLARA</h2>
+    <p>Leo Marin is back in Costa Solara with nothing but a debt to the harbour crew and a fixer
+    called Marta Solis. Steal cars, outrun the Solara PD, run Marta's jobs, and buy your way out —
+    on foot and behind the wheel, across a whole sun-soaked city.</p>
+    <div class="controls">
+      <b>W A S D</b> — move / drive &nbsp;·&nbsp; <b>Mouse drag</b> — look around<br>
+      <b>E</b> — steal / exit a car &nbsp;·&nbsp; <b>Click</b> — shoot &nbsp;·&nbsp; <b>F</b> — punch<br>
+      <b>H</b> — horn &nbsp;·&nbsp; <b>R</b> — reload &nbsp;·&nbsp; <b>M</b> — next mission &nbsp;·&nbsp; <b>Shift</b> — sprint / boost<br>
+      <b>Esc</b> — pause &amp; save &nbsp;·&nbsp; progress saves automatically
+    </div>
+    <div>
+      <button id="btn-new">▶ New Game</button>
+      <button id="btn-continue" class="ghost hidden">↻ Continue</button>
+      <button id="btn-mute" class="ghost">🔊 Sound on</button>
+    </div>
+    <p class="small">An original game. Its city, characters, vehicles, story, art and music are all its own —
+    nothing from any commercial game. Plays offline, no network needed.</p>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel">
+    <h1 style="font-size:44px">PAUSED</h1>
+    <p>Progress saved. The city waits.</p>
+    <button id="btn-resume">▶ Resume</button>
+    <button id="btn-quit" class="ghost">Main menu</button>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="panel">
+    <h1 id="over-title" style="font-size:52px">BUSTED</h1>
+    <p id="over-text"></p>
+    <button id="btn-again">▶ Back on the street</button>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

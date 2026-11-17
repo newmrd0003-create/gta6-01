@@ -1,98 +1,99 @@
-// SOLARA HEAT — input.js
-// One job: keyboard + mouse state for the whole game. Held keys are read
-// every frame; one-shot presses (enter car, punch, reload, pause, horn)
-// are queued as flags and taken once by the loop, so a press between
-// frames is never lost or counted twice. Pointer drag orbits the camera;
-// a plain click fires the pistol.
+// SOLARA HEAT — input
+// Keyboard and mouse for the whole game. Keys held down are polled every
+// frame; single presses (steal a car, punch, reload, pause, horn) land in
+// a one-shot queue that the loop takes exactly once, so a press between
+// frames is neither lost nor counted twice. Dragging orbits the camera; a
+// plain left click fires the pistol.
 
-export const ACT_ENTER = 1;   // E — enter / exit a car
-export const ACT_PUNCH = 2;   // F — punch
-export const ACT_RELOAD = 4;  // R — reload pistol
-export const ACT_PAUSE = 8;   // Esc / P — pause
-export const ACT_SHOOT = 16;  // mouse click — fire pistol
-export const ACT_START = 32;  // Enter / Space — start from a menu
-export const ACT_HORN = 64;   // H — honk the horn (in a car)
+export const K_ENTER = 1;   // E — get in / out of a car
+export const K_PUNCH = 2;   // F — punch
+export const K_RELOAD = 4;  // R — reload the pistol
+export const K_PAUSE = 8;   // Esc / P — pause
+export const K_FIRE = 16;   // mouse click — shoot
+export const K_START = 32;  // Enter / Space — start from a menu
+export const K_HORN = 64;   // H — honk (while driving)
 
-const PREVENT_DEFAULT = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+const STOP_SCROLL = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
-// One-shot key -> action flag. Held keys never set a flag here.
-const ONE_SHOT_KEYS = {
-  KeyE: ACT_ENTER,
-  KeyF: ACT_PUNCH,
-  KeyR: ACT_RELOAD,
-  KeyH: ACT_HORN,
-  Escape: ACT_PAUSE,
-  KeyP: ACT_PAUSE,
-  Enter: ACT_START,
-  Space: ACT_START,
+// One-shot key -> queued action. Held keys never queue anything here.
+const PRESS_KEYS = {
+  KeyE: K_ENTER,
+  KeyF: K_PUNCH,
+  KeyR: K_RELOAD,
+  KeyH: K_HORN,
+  Escape: K_PAUSE,
+  KeyP: K_PAUSE,
+  Enter: K_START,
+  Space: K_START,
 };
 
-export function createInput(canvas) {
-  const keys = new Set();
-  let actions = 0;
-  let mouseDX = 0, mouseDY = 0;
+export function makeControls(canvas) {
+  const held = new Set();
+  let queued = 0;
+  let dragX = 0, dragY = 0;
   let dragging = false;
-  let lastX = 0, lastY = 0;
+  let px = 0, py = 0;
 
-  window.addEventListener('keydown', (event) => {
-    if (event.repeat) return;
-    keys.add(event.code);
-    const flag = ONE_SHOT_KEYS[event.code];
-    if (flag) actions |= flag;
-    if (PREVENT_DEFAULT.includes(event.code)) event.preventDefault();
+  window.addEventListener('keydown', (ev) => {
+    if (ev.repeat) return;
+    held.add(ev.code);
+    const flag = PRESS_KEYS[ev.code];
+    if (flag) queued |= flag;
+    if (STOP_SCROLL.includes(ev.code)) ev.preventDefault();
   });
-  window.addEventListener('keyup', (event) => keys.delete(event.code));
-  // Losing focus must not leave a key stuck down (Alt-Tab mid-drive).
-  window.addEventListener('blur', () => { keys.clear(); dragging = false; });
+  window.addEventListener('keyup', (ev) => held.delete(ev.code));
+  // Alt-Tab must never leave a key stuck down mid-chase.
+  window.addEventListener('blur', () => { held.clear(); dragging = false; });
 
-  canvas.addEventListener('pointerdown', (event) => {
-    dragging = true; lastX = event.clientX; lastY = event.clientY;
-    if (event.button === 0) actions |= ACT_SHOOT;
+  canvas.addEventListener('pointerdown', (ev) => {
+    dragging = true;
+    px = ev.clientX; py = ev.clientY;
+    if (ev.button === 0) queued |= K_FIRE;
   });
-  window.addEventListener('pointermove', (event) => {
+  window.addEventListener('pointermove', (ev) => {
     if (!dragging) return;
-    mouseDX += event.clientX - lastX;
-    mouseDY += event.clientY - lastY;
-    lastX = event.clientX; lastY = event.clientY;
+    dragX += ev.clientX - px;
+    dragY += ev.clientY - py;
+    px = ev.clientX; py = ev.clientY;
   });
   window.addEventListener('pointerup', () => { dragging = false; });
 
-  const anyOf = (...codes) => codes.some((c) => keys.has(c));
+  const anyHeld = (...codes) => codes.some((c) => held.has(c));
 
   return {
-    held(code) { return keys.has(code); },
-    heldAny(...codes) { return anyOf(...codes); },
-    // WASD / arrows: forward, strafe, back.
-    moveAxis() {
-      const f = (anyOf('KeyW', 'ArrowUp') ? 1 : 0) - (anyOf('KeyS', 'ArrowDown') ? 1 : 0);
-      const s = (anyOf('KeyD', 'ArrowRight') ? 1 : 0) - (anyOf('KeyA', 'ArrowLeft') ? 1 : 0);
-      return { forward: f, strafe: s };
+    down(code) { return held.has(code); },
+    any(...codes) { return anyHeld(...codes); },
+    // WASD / arrows on foot: forward, strafe, back.
+    walk() {
+      const fwd = (anyHeld('KeyW', 'ArrowUp') ? 1 : 0) - (anyHeld('KeyS', 'ArrowDown') ? 1 : 0);
+      const side = (anyHeld('KeyD', 'ArrowRight') ? 1 : 0) - (anyHeld('KeyA', 'ArrowLeft') ? 1 : 0);
+      return { forward: fwd, strafe: side };
     },
-    // Car: W/S throttle, A/D steer, Space handbrake, Shift boost.
-    driveAxis() {
-      const throttle = (anyOf('KeyW', 'ArrowUp') ? 1 : 0) - (anyOf('KeyS', 'ArrowDown') ? 1 : 0);
-      const steer = (anyOf('KeyA', 'ArrowLeft') ? 1 : 0) - (anyOf('KeyD', 'ArrowRight') ? 1 : 0);
+    // In a car: W/S throttle, A/D steering, Space handbrake, Shift boost.
+    drive() {
+      const gas = (anyHeld('KeyW', 'ArrowUp') ? 1 : 0) - (anyHeld('KeyS', 'ArrowDown') ? 1 : 0);
+      const wheel = (anyHeld('KeyA', 'ArrowLeft') ? 1 : 0) - (anyHeld('KeyD', 'ArrowRight') ? 1 : 0);
       return {
-        throttle, steer,
-        brake: keys.has('Space'),
-        boost: anyOf('ShiftLeft', 'ShiftRight'),
+        throttle: gas, steer: wheel,
+        brake: held.has('Space'),
+        boost: anyHeld('ShiftLeft', 'ShiftRight'),
       };
     },
-    sprint() { return anyOf('ShiftLeft', 'ShiftRight'); },
-    takeMouseDelta() {
-      const d = { x: mouseDX, y: mouseDY };
-      mouseDX = 0; mouseDY = 0;
+    boosting() { return anyHeld('ShiftLeft', 'ShiftRight'); },
+    mouse() {
+      const d = { x: dragX, y: dragY };
+      dragX = 0; dragY = 0;
       return d;
     },
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    take() {
+      const got = queued;
+      queued = 0;
+      return got;
     },
-    peekActions() { return actions; },
-    // Drop every queued press — used when a menu opens so a stale Enter
-    // does not instantly start (or skip) the game behind it.
-    clearActions() { actions = 0; },
-    reset() { keys.clear(); actions = 0; mouseDX = 0; mouseDY = 0; dragging = false; },
+    peek() { return queued; },
+    // Throw away queued presses — a menu opening must not eat a stale
+    // Enter and start (or skip) the game behind it.
+    clear() { queued = 0; },
+    wipe() { held.clear(); queued = 0; dragX = 0; dragY = 0; dragging = false; },
   };
 }

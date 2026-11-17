@@ -1,40 +1,39 @@
-// SOLARA HEAT — save.js
-// One job: persist the player's progress to localStorage and read it back.
-// A save holds cash, health, missions finished, the player's spot, play
-// time and lifetime totals — never the live world, which is rebuilt from
-// the seed on every load. Versioned: an old or corrupt save migrates to
-// the current shape instead of crashing the boot.
+// SOLARA HEAT — save
+// Progress in localStorage. A save carries cash, health, finished jobs,
+// where Leo stands, play time and lifetime totals — never the live world,
+// which the seed rebuilds on every load. Versioned: a stale or broken
+// save is reshaped into the current form instead of breaking the boot.
 
 import { SAVE_KEY } from './config.js';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VER = 2;
 
-export function defaultSave() {
+export function blankSave() {
   return {
-    version: SAVE_VERSION,
+    version: SAVE_VER,
     cash: 150,
     health: 100,
     missionsDone: [],
     player: { x: 0, z: 30, heading: 0 },
     storySeen: false,
     playTime: 0,
-    // Lifetime totals, shown on the pause screen's next pass and kept
-    // across new games so the player's history survives a restart.
+    // Lifetime totals, shown on the pause screen later and kept across
+    // new games so Leo's history survives a restart.
     stats: { earned: 0, carsStolen: 0, busts: 0 },
     savedAt: 0,
   };
 }
 
-// Bring any older save shape up to date; unknown fields are dropped.
-function migrate(data) {
-  const base = defaultSave();
-  if (!data || typeof data !== 'object') return base;
-  const out = { ...base, ...data, version: SAVE_VERSION };
+// Lift any older save shape into the current one; stray fields are dropped.
+function upgradeSave(data) {
+  const fresh = blankSave();
+  if (!data || typeof data !== 'object') return fresh;
+  const out = { ...fresh, ...data, version: SAVE_VER };
   if (!Array.isArray(out.missionsDone)) out.missionsDone = [];
-  if (!out.player || typeof out.player.x !== 'number') out.player = base.player;
-  if (!out.stats || typeof out.stats.earned !== 'number') out.stats = base.stats;
-  out.cash = typeof out.cash === 'number' ? out.cash : base.cash;
-  out.health = typeof out.health === 'number' ? out.health : base.health;
+  if (!out.player || typeof out.player.x !== 'number') out.player = fresh.player;
+  if (!out.stats || typeof out.stats.earned !== 'number') out.stats = fresh.stats;
+  out.cash = typeof out.cash === 'number' ? out.cash : fresh.cash;
+  out.health = typeof out.health === 'number' ? out.health : fresh.health;
   out.playTime = typeof out.playTime === 'number' ? out.playTime : 0;
   return out;
 }
@@ -44,32 +43,32 @@ export function hasSave() {
   catch { return false; }
 }
 
-export function loadSave() {
+export function readSave() {
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || typeof data.cash !== 'number') return null;
-    return migrate(data);
+    return upgradeSave(data);
   } catch {
     return null;
   }
 }
 
-export function writeSave(state) {
+export function storeSave(s) {
   try {
     const data = {
-      version: SAVE_VERSION,
-      cash: Math.round(state.cash),
-      health: Math.round(state.health),
-      missionsDone: state.missionsDone.slice(),
-      player: { x: state.playerX, z: state.playerZ, heading: state.playerHeading },
+      version: SAVE_VER,
+      cash: Math.round(s.cash),
+      health: Math.round(s.health),
+      missionsDone: s.missionsDone.slice(),
+      player: { x: s.playerX, z: s.playerZ, heading: s.playerHeading },
       storySeen: true,
-      playTime: Math.round(state.playTime),
+      playTime: Math.round(s.playTime),
       stats: {
-        earned: Math.round(state.stats?.earned || 0),
-        carsStolen: Math.round(state.stats?.carsStolen || 0),
-        busts: Math.round(state.stats?.busts || 0),
+        earned: Math.round(s.stats?.earned || 0),
+        carsStolen: Math.round(s.stats?.carsStolen || 0),
+        busts: Math.round(s.stats?.busts || 0),
       },
       savedAt: Date.now(),
     };
@@ -80,6 +79,6 @@ export function writeSave(state) {
   }
 }
 
-export function clearSave() {
+export function wipeSave() {
   try { window.localStorage.removeItem(SAVE_KEY); } catch { /* storage off */ }
 }

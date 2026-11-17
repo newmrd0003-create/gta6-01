@@ -1,8 +1,8 @@
 # SOLARA HEAT — Make GTA 6
 
-[![make.fun](https://img.shields.io/badge/make.fun-gta6--01-ffc030)](https://make.fun/bounty/gta6-01)
-[![Bounty](https://img.shields.io/badge/bounty-%241%2C666-37d67a)](https://make.fun/bounty/gta6-01)
-[![Plays offline](https://img.shields.io/badge/plays-offline%20in%20a%20browser-2f6fd8)](https://make.fun/bounty/gta6-01)
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/newmrd0003-create/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/newmrd0003-create/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
 An original open-world crime game in the sun-soaked coastal city of **Costa Solara**, built for the [Make GTA 6 bounty on make.fun](https://make.fun/bounty/gta6-01) ($1,666, top 100 share the prize). Leo Marin is back in town with nothing but a debt to the harbour crew and a fixer called Marta Solis. Steal cars, outrun the Solara PD, run Marta's jobs, and buy your way out — on foot and behind the wheel, across a whole city.
 
